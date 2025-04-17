@@ -2,13 +2,12 @@ const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
 require('dotenv').config();
+const { deployCommands } = require('./utils/deployCommands');
 
 // Create a new client instance
 const client = new Client({ 
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
   ] 
 });
 
@@ -44,5 +43,25 @@ for (const file of commandFiles) {
   }
 }
 
-// Log in to Discord with your client's token
-client.login(process.env.TOKEN);
+// Deploy commands when bot starts
+const { TOKEN, CLIENT_ID, SERVER_ID } = process.env;
+if (!TOKEN || !CLIENT_ID || !SERVER_ID) {
+  console.error('Missing required environment variables (TOKEN, CLIENT_ID, SERVER_ID)');
+  process.exit(1);
+}
+
+(async () => {
+  try {
+    // Deploy commands before bot login
+    const deployResult = await deployCommands(TOKEN, CLIENT_ID, SERVER_ID);
+    if (!deployResult.success) {
+      console.error('Failed to deploy commands:', deployResult.error);
+    }
+    
+    // Log in to Discord with the client's token
+    await client.login(TOKEN);
+  } catch (error) {
+    console.error('Error during startup:', error);
+    process.exit(1);
+  }
+})();

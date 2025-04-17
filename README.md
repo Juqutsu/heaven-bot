@@ -15,14 +15,16 @@ A Discord bot for Lost Heaven server built with Discord.js v14.
    SERVER_ID=your_server_id
    TOKEN=your_bot_token
    ```
-4. Deploy slash commands:
-   ```bash
-   npm run deploy
-   ```
-5. Start the bot:
+4. Start the bot:
    ```bash
    npm start
    ```
+
+## Features
+
+- **Auto-deploy commands:** Commands are automatically deployed when the bot starts
+- **Help command:** Use `/help` to see all available commands
+- **Command handling:** Simple structure for adding new commands
 
 ## Development
 
@@ -34,10 +36,10 @@ npm run dev
 ## Structure
 
 - `src/bot.js` - Main bot file that initializes the client and loads events/commands
-- `src/deploy-commands.js` - Registers slash commands with Discord API
 - `src/commands/` - Contains all command files
 - `src/events/` - Contains event handlers
 - `src/utils/` - Contains utility functions
+  - `deployCommands.js` - Handles automatic command deployment
 
 ## Adding Commands
 
@@ -55,4 +57,4 @@ npm run dev
      },
    };
    ```
-3. Run `npm run deploy` to register the new command
+3. Restart the bot - commands will be automatically deployed
