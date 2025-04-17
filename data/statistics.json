@@ -1,0 +1,59 @@
+{
+  "820239667873316874": {
+    "messages": {
+      "total": 16,
+      "daily": {
+        "2025-04-17": 16
+      },
+      "weekly": {
+        "2025-W15": 16
+      },
+      "monthly": {
+        "2025-04": 16
+      }
+    },
+    "voice": {
+      "totalMinutes": 0,
+      "daily": {},
+      "weekly": {},
+      "monthly": {}
+    },
+    "commands": {
+      "total": 14,
+      "types": {
+        "rank": 9,
+        "prestige": 1,
+        "leaderboard": 1,
+        "stats": 2,
+        "ranks": 1
+      }
+    }
+  },
+  "868982652466757703": {
+    "messages": {
+      "total": 1,
+      "daily": {
+        "2025-04-17": 1
+      },
+      "weekly": {
+        "2025-W15": 1
+      },
+      "monthly": {
+        "2025-04": 1
+      }
+    },
+    "voice": {
+      "totalMinutes": 0,
+      "daily": {},
+      "weekly": {},
+      "monthly": {}
+    },
+    "commands": {
+      "total": 3,
+      "types": {
+        "leaderboard": 1,
+        "rank": 2
+      }
+    }
+  }
+}

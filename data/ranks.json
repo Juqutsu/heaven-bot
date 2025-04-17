@@ -1,0 +1,16 @@
+{
+  "roles": {},
+  "textXp": {
+    "baseAmount": 15,
+    "cooldown": 60,
+    "randomBonus": 5
+  },
+  "voiceXp": {
+    "perMinute": 10,
+    "afkDisabled": true
+  },
+  "formula": {
+    "baseXp": 100,
+    "exponent": 1.5
+  }
+}
