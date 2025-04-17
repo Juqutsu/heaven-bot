@@ -19,13 +19,17 @@
       "monthly": {}
     },
     "commands": {
-      "total": 14,
+      "total": 21,
       "types": {
         "rank": 9,
         "prestige": 1,
         "leaderboard": 1,
-        "stats": 2,
-        "ranks": 1
+        "stats": 3,
+        "ranks": 1,
+        "mute": 2,
+        "modsettings": 2,
+        "unmute": 1,
+        "infractions": 1
       }
     }
   },

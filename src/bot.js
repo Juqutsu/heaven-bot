@@ -118,6 +118,16 @@ if (!TOKEN || !CLIENT_ID || !SERVER_ID) {
         console.error('Error processing voice sessions:', error);
       }
     }, 5 * 60 * 1000); // Process every 5 minutes
+
+    // Set up moderation timer to check for expired infractions
+    setInterval(() => {
+      try {
+        const { checkExpiredInfractions } = require('./utils/moderation');
+        checkExpiredInfractions(client);
+      } catch (error) {
+        console.error('Error checking expired infractions:', error);
+      }
+    }, 60 * 1000); // Check every minute
   } catch (error) {
     console.error('Error during startup:', error);
     process.exit(1);

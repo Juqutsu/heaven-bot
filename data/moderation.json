@@ -1,0 +1,29 @@
+{
+  "infractions": {
+    "868982652466757703": [
+      {
+        "id": "m9l9voble7q3w",
+        "type": "mute",
+        "reason": "test",
+        "moderatorId": "820239667873316874",
+        "timestamp": 1744889035233,
+        "active": true,
+        "duration": 3600000,
+        "expiresAt": 1744892635233
+      },
+      {
+        "id": "m9l9w0l0o07ge",
+        "type": "unmute",
+        "reason": "test",
+        "moderatorId": "820239667873316874",
+        "timestamp": 1744889051124,
+        "active": true
+      }
+    ]
+  },
+  "settings": {
+    "logChannelId": null,
+    "dmNotifications": true,
+    "autoMuteRole": "1315714306548957306"
+  }
+}
