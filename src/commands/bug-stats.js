@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-require('dotenv').config();
+const { BUGS_CHANNEL_ID } = require('../config');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,8 +9,8 @@ module.exports = {
   
   async execute(interaction) {
     try {
-      // Get the bug reports channel ID from env
-      const bugsChannelId = process.env.BUGS_CHANNEL_ID;
+      // Get the bug reports channel ID from config
+      const bugsChannelId = BUGS_CHANNEL_ID;
       
       if (!bugsChannelId) {
         await interaction.reply({ 
