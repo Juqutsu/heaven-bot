@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
-require('dotenv').config();
+require('../config');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,6 +17,15 @@ module.exports = {
   async execute(interaction) {
     try {
       const channel = interaction.options.getChannel('channel');
+
+      // Prevent unnecessary writes if the channel is already set
+      if (process.env.BUGS_CHANNEL_ID === channel.id) {
+        await interaction.reply({
+          content: 'This channel is already configured for bug reports.',
+          ephemeral: true
+        });
+        return;
+      }
       
       // Check channel permissions
       const botMember = interaction.guild.members.cache.get(interaction.client.user.id);

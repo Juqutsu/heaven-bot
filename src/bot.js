@@ -1,7 +1,7 @@
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
-require('dotenv').config();
+const { TOKEN, CLIENT_ID, SERVER_ID } = require('./config');
 const { deployCommands } = require('./utils/deployCommands');
 
 // Create a new client instance
@@ -92,11 +92,6 @@ for (const file of commandFiles) {
 }
 
 // Deploy commands when bot starts
-const { TOKEN, CLIENT_ID, SERVER_ID } = process.env;
-if (!TOKEN || !CLIENT_ID || !SERVER_ID) {
-  console.error('Missing required environment variables (TOKEN, CLIENT_ID, SERVER_ID)');
-  process.exit(1);
-}
 
 (async () => {
   try {

@@ -14,11 +14,14 @@ A Discord bot for Lost Heaven server built with Discord.js v14.
    CLIENT_ID=your_bot_client_id
    SERVER_ID=your_server_id
    TOKEN=your_bot_token
+   # Optional: channel for bug reports
+   BUGS_CHANNEL_ID=bug_reports_channel_id
    ```
 4. Start the bot:
    ```bash
    npm start
    ```
+   The bot validates required environment variables on startup via `src/config.js`.
 
 ## Features
 
