@@ -51,9 +51,13 @@ module.exports = {
         .setTimestamp();
       
       // Add XP breakdown
+      const totalXp = userData.xp;
+      const textPercent = totalXp > 0 ? Math.round(userData.totalTextXp / totalXp * 100) : 0;
+      const voicePercent = totalXp > 0 ? Math.round(userData.totalVoiceXp / totalXp * 100) : 0;
+
       embed.addFields({
         name: 'XP Breakdown',
-        value: `Text XP: ${userData.totalTextXp.toLocaleString()} (${Math.round(userData.totalTextXp / userData.xp * 100)}%)\nVoice XP: ${userData.totalVoiceXp.toLocaleString()} (${Math.round(userData.totalVoiceXp / userData.xp * 100)}%)`,
+        value: `Text XP: ${userData.totalTextXp.toLocaleString()} (${textPercent}%)\nVoice XP: ${userData.totalVoiceXp.toLocaleString()} (${voicePercent}%)`,
         inline: false
       });
       
