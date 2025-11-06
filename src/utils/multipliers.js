@@ -4,6 +4,7 @@
  */
 
 const { getActiveMultipliers } = require('./database');
+const { getActiveXpBoost } = require('./inventory');
 
 /**
  * Calculate total XP multiplier for user
@@ -13,15 +14,17 @@ const { getActiveMultipliers } = require('./database');
  */
 async function getTotalMultiplier(userId, roleIds = []) {
   const multipliers = await getActiveMultipliers(userId, roleIds);
-  
-  if (multipliers.length === 0) {
-    return 1.0;
-  }
+  const shopBoost = await getActiveXpBoost(userId);
   
   // Combine multipliers multiplicatively
   let totalMultiplier = 1.0;
   for (const multiplier of multipliers) {
     totalMultiplier *= multiplier.multiplierValue;
+  }
+  
+  // Apply shop boost (highest active boost)
+  if (shopBoost > 1.0) {
+    totalMultiplier *= shopBoost;
   }
   
   return totalMultiplier;

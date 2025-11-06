@@ -2,6 +2,7 @@ const { Events, EmbedBuilder } = require('discord.js');
 const { awardMessageXp, checkRoleRewards, checkPrestige } = require('../utils/leveling');
 const { updateMessageStats } = require('../utils/statistics');
 const { initializeDatabase } = require('../utils/database');
+const { getCurrencySettings, earnCoins, isOnMessageCooldown, setMessageCooldown } = require('../utils/economy');
 const { sendLevelUpNotification, sendAchievementNotification } = require('../utils/notifications');
 const logger = require('../utils/logger');
 
@@ -32,6 +33,23 @@ module.exports = {
         await updateMessageStats(message.author.id);
       } catch (statsError) {
         logger.error('Error updating message statistics:', statsError);
+      }
+
+      // Award coins for the message with cooldown
+      try {
+        const settings = await getCurrencySettings();
+        const cd = Math.max(0, settings.messageCoins?.cooldown || 60);
+        if (!isOnMessageCooldown(message.author.id)) {
+          const min = Math.max(0, settings.messageCoins?.min || 1);
+          const max = Math.max(min, settings.messageCoins?.max || 3);
+          const amount = Math.floor(Math.random() * (max - min + 1)) + min;
+          if (amount > 0) {
+            await earnCoins(message.author.id, amount, 'message');
+          }
+          setMessageCooldown(message.author.id, cd);
+        }
+      } catch (coinError) {
+        logger.error('Error awarding message coins:', coinError);
       }
       
       // Get guild member for multipliers

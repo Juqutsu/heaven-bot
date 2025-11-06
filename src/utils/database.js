@@ -8,6 +8,7 @@ const path = require('node:path');
 const fs = require('node:fs').promises;
 const { initializeSchema } = require('./db-schema');
 const { userCache, settingsCache } = require('./cache');
+const logger = require('./logger');
 
 // Database file path
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -84,9 +85,15 @@ async function getRankSettings() {
   }
   
   // Ensure all required settings exist
-  if (!settings.textXp) settings.textXp = { baseAmount: 15, cooldown: 60, randomBonus: 5 };
-  if (!settings.voiceXp) settings.voiceXp = { perMinute: 10, afkDisabled: true };
-  if (!settings.formula) settings.formula = { baseXp: 100, exponent: 1.5 };
+  if (!settings.textXp) {
+    settings.textXp = { baseAmount: 15, cooldown: 60, randomBonus: 5 };
+  }
+  if (!settings.voiceXp) {
+    settings.voiceXp = { perMinute: 10, afkDisabled: true };
+  }
+  if (!settings.formula) {
+    settings.formula = { baseXp: 100, exponent: 1.5 };
+  }
   
   // Cache for 10 minutes
   settingsCache.set(cacheKey, settings, 10 * 60 * 1000);
@@ -100,10 +107,11 @@ async function getRankSettings() {
  */
 async function saveRankSettings(settings) {
   const database = getDatabase();
-  const insert = database.prepare('INSERT OR REPLACE INTO rank_settings (key, value, updated_at) VALUES (?, ?, strftime("%s", "now"))');
+  const now = Math.floor(Date.now() / 1000);
+  const insert = database.prepare('INSERT OR REPLACE INTO rank_settings (key, value, updated_at) VALUES (?, ?, ?)');
   const insertMany = database.transaction((settingsObj) => {
     for (const [key, value] of Object.entries(settingsObj)) {
-      insert.run(key, JSON.stringify(value));
+      insert.run(key, JSON.stringify(value), now);
     }
   });
   insertMany(settings);
@@ -152,10 +160,11 @@ async function getPrestigeSettings() {
  */
 async function savePrestigeSettings(settings) {
   const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
   const insert = database.prepare(`
     INSERT OR REPLACE INTO prestiges 
     (prestige_level, name, required_level, color, role_id, xp_boost, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   const insertMany = database.transaction((prestiges) => {
     for (const [level, config] of Object.entries(prestiges)) {
@@ -165,7 +174,8 @@ async function savePrestigeSettings(settings) {
         config.requiredLevel,
         config.color,
         config.roleId,
-        config.xpBoost
+        config.xpBoost,
+        now
       );
     }
   });
@@ -248,9 +258,10 @@ async function getAllUsers() {
  */
 async function saveUserData(userId, userData) {
   const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
   const update = database.prepare(`
     INSERT INTO users (user_id, xp, level, prestige, last_message_timestamp, voice_join_timestamp, total_text_xp, total_voice_xp, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       xp = excluded.xp,
       level = excluded.level,
@@ -259,7 +270,7 @@ async function saveUserData(userId, userData) {
       voice_join_timestamp = excluded.voice_join_timestamp,
       total_text_xp = excluded.total_text_xp,
       total_voice_xp = excluded.total_voice_xp,
-      updated_at = strftime('%s', 'now')
+      updated_at = excluded.updated_at
   `);
   
   update.run(
@@ -270,7 +281,8 @@ async function saveUserData(userId, userData) {
     userData.lastMessageTimestamp || 0,
     userData.voiceJoinTimestamp || 0,
     userData.totalTextXp || 0,
-    userData.totalVoiceXp || 0
+    userData.totalVoiceXp || 0,
+    now
   );
   
   // Update cache with new data
@@ -340,44 +352,45 @@ async function getUserStatistics(userId) {
  */
 async function saveUserStatistics(userId, statistics) {
   const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
   const insert = database.prepare(`
     INSERT OR REPLACE INTO statistics (user_id, stat_type, period_type, period_key, value, updated_at)
-    VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'))
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   
-  const insertMany = database.transaction((userId, stats) => {
+  const insertMany = database.transaction((userId, stats, now) => {
     // Messages
-    insert.run(userId, 'messages', 'total', 'total', stats.messages.total || 0);
+    insert.run(userId, 'messages', 'total', 'total', stats.messages.total || 0, now);
     for (const [key, value] of Object.entries(stats.messages.daily || {})) {
-      insert.run(userId, 'messages', 'daily', key, value);
+      insert.run(userId, 'messages', 'daily', key, value, now);
     }
     for (const [key, value] of Object.entries(stats.messages.weekly || {})) {
-      insert.run(userId, 'messages', 'weekly', key, value);
+      insert.run(userId, 'messages', 'weekly', key, value, now);
     }
     for (const [key, value] of Object.entries(stats.messages.monthly || {})) {
-      insert.run(userId, 'messages', 'monthly', key, value);
+      insert.run(userId, 'messages', 'monthly', key, value, now);
     }
     
     // Voice
-    insert.run(userId, 'voice', 'total', 'total', stats.voice.totalMinutes || 0);
+    insert.run(userId, 'voice', 'total', 'total', stats.voice.totalMinutes || 0, now);
     for (const [key, value] of Object.entries(stats.voice.daily || {})) {
-      insert.run(userId, 'voice', 'daily', key, value);
+      insert.run(userId, 'voice', 'daily', key, value, now);
     }
     for (const [key, value] of Object.entries(stats.voice.weekly || {})) {
-      insert.run(userId, 'voice', 'weekly', key, value);
+      insert.run(userId, 'voice', 'weekly', key, value, now);
     }
     for (const [key, value] of Object.entries(stats.voice.monthly || {})) {
-      insert.run(userId, 'voice', 'monthly', key, value);
+      insert.run(userId, 'voice', 'monthly', key, value, now);
     }
     
     // Commands
-    insert.run(userId, 'commands', 'total', 'total', stats.commands.total || 0);
+    insert.run(userId, 'commands', 'total', 'total', stats.commands.total || 0, now);
     for (const [key, value] of Object.entries(stats.commands.types || {})) {
-      insert.run(userId, 'commands', 'type', key, value);
+      insert.run(userId, 'commands', 'type', key, value, now);
     }
   });
   
-  insertMany(userId, statistics);
+  insertMany(userId, statistics, now);
 }
 
 /**
@@ -386,7 +399,9 @@ async function saveUserStatistics(userId, statistics) {
  * @returns {Promise<number>} XP required
  */
 async function calculateRequiredXp(level) {
-  if (level < 1) level = 1;
+  if (level < 1) {
+    level = 1;
+  }
   
   const settings = await getRankSettings();
   const requiredXp = Math.floor(settings.formula.baseXp * Math.pow(level, settings.formula.exponent));
@@ -400,7 +415,9 @@ async function calculateRequiredXp(level) {
  * @returns {Promise<number>} Current level
  */
 async function calculateLevel(xp) {
-  if (xp < 0) xp = 0;
+  if (xp < 0) {
+    xp = 0;
+  }
   
   const settings = await getRankSettings();
   let level = 1;
@@ -594,17 +611,21 @@ async function updateChallengeProgress(userId, challengeId, progress) {
   
   // Get challenge
   const challenge = database.prepare('SELECT * FROM challenges WHERE challenge_id = ?').get(challengeId);
-  if (!challenge) return false;
+  if (!challenge) {
+    return false;
+  }
   
   // Update progress
+  const now = Math.floor(Date.now() / 1000);
+  const completedAt = progress >= challenge.requirement_value ? now : null;
   database.prepare(`
-    INSERT INTO user_challenges (user_id, challenge_id, progress, completed)
-    VALUES (?, ?, ?, 0)
+    INSERT INTO user_challenges (user_id, challenge_id, progress, completed, completed_at)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(user_id, challenge_id) DO UPDATE SET
       progress = excluded.progress,
       completed = CASE WHEN excluded.progress >= ? THEN 1 ELSE completed END,
-      completed_at = CASE WHEN excluded.progress >= ? AND completed = 0 THEN strftime('%s', 'now') ELSE completed_at END
-  `).run(userId, challengeId, progress, challenge.requirement_value, challenge.requirement_value);
+      completed_at = CASE WHEN excluded.progress >= ? AND completed = 0 THEN excluded.completed_at ELSE completed_at END
+  `).run(userId, challengeId, progress, progress >= challenge.requirement_value ? 1 : 0, completedAt, challenge.requirement_value, challenge.requirement_value);
   
   // Check if completed
   const userChallenge = database.prepare('SELECT * FROM user_challenges WHERE user_id = ? AND challenge_id = ?').get(userId, challengeId);
@@ -725,15 +746,16 @@ async function updateUserStreak(userId, activityDate) {
   const streakBonus = Math.min(0.1, Math.floor(currentStreak / 7) * 0.01);
   
   // Update database
+  const now = Math.floor(Date.now() / 1000);
   database.prepare(`
     UPDATE user_streaks
     SET current_streak = ?,
         longest_streak = ?,
         last_activity_date = ?,
         streak_bonus_multiplier = ?,
-        updated_at = strftime('%s', 'now')
+        updated_at = ?
     WHERE user_id = ?
-  `).run(currentStreak, longestStreak, activityDate, streakBonus, userId);
+  `).run(currentStreak, longestStreak, activityDate, streakBonus, now, userId);
   
   return {
     userId,
@@ -861,14 +883,35 @@ async function getUserRankCardSettings(userId) {
     return {
       userId,
       primaryColor: null,
-      backgroundColor: null
+      backgroundColor: null,
+      settings: null
     };
+  }
+  
+  // Parse JSON settings if exists, otherwise use legacy colors
+  let parsedSettings = {};
+  if (row.settings_json) {
+    try {
+      parsedSettings = JSON.parse(row.settings_json);
+    } catch (error) {
+      // If parsing fails, use legacy colors
+      parsedSettings = {};
+    }
+  }
+  
+  // Merge with legacy colors for backward compatibility
+  if (row.primary_color) {
+    parsedSettings.primaryColor = row.primary_color;
+  }
+  if (row.background_color) {
+    parsedSettings.backgroundColor = row.background_color;
   }
   
   return {
     userId,
     primaryColor: row.primary_color,
-    backgroundColor: row.background_color
+    backgroundColor: row.background_color,
+    settings: parsedSettings
   };
 }
 
@@ -879,14 +922,15 @@ async function getUserRankCardSettings(userId) {
  */
 async function saveUserRankCardSettings(userId, settings) {
   const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
   database.prepare(`
     INSERT INTO user_rank_card_settings (user_id, primary_color, background_color, updated_at)
-    VALUES (?, ?, ?, strftime('%s', 'now'))
+    VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       primary_color = excluded.primary_color,
       background_color = excluded.background_color,
-      updated_at = strftime('%s', 'now')
-  `).run(userId, settings.primaryColor || null, settings.backgroundColor || null);
+      updated_at = excluded.updated_at
+  `).run(userId, settings.primaryColor || null, settings.backgroundColor || null, now);
 }
 
 // ========== NOTIFICATION SETTINGS ==========
@@ -924,20 +968,198 @@ async function getUserNotificationSettings(userId) {
  */
 async function saveUserNotificationSettings(userId, settings) {
   const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
   database.prepare(`
     INSERT INTO notification_settings (user_id, level_up_dm, achievement_dm, challenge_complete_dm, updated_at)
-    VALUES (?, ?, ?, ?, strftime('%s', 'now'))
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       level_up_dm = excluded.level_up_dm,
       achievement_dm = excluded.achievement_dm,
       challenge_complete_dm = excluded.challenge_complete_dm,
-      updated_at = strftime('%s', 'now')
+      updated_at = excluded.updated_at
   `).run(
     userId,
     settings.levelUpDm ? 1 : 0,
     settings.achievementDm ? 1 : 0,
-    settings.challengeCompleteDm ? 1 : 0
+    settings.challengeCompleteDm ? 1 : 0,
+    now
   );
+}
+
+// ========== GUILD SETTINGS (WELCOME/GOODBYE) ==========
+
+/**
+ * Get per-guild settings
+ * @param {string} guildId
+ * @returns {Promise<Object>} settings
+ */
+async function getGuildSettings(guildId) {
+  const database = getDatabase();
+  const row = database.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(guildId);
+  if (!row) {
+    return {
+      guildId,
+      welcomeChannelId: null,
+      welcomeMessage: null,
+      goodbyeChannelId: null,
+      goodbyeMessage: null,
+      reactionRolesMessageId: null
+    };
+  }
+  return {
+    guildId,
+    welcomeChannelId: row.welcome_channel_id,
+    welcomeMessage: row.welcome_message,
+    goodbyeChannelId: row.goodbye_channel_id,
+    goodbyeMessage: row.goodbye_message,
+    reactionRolesMessageId: row.reaction_roles_message_id
+  };
+}
+
+/**
+ * Save per-guild settings
+ * @param {string} guildId
+ * @param {Object} settings
+ */
+async function saveGuildSettings(guildId, settings) {
+  const database = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
+  database.prepare(`
+    INSERT INTO guild_settings (guild_id, welcome_channel_id, welcome_message, goodbye_channel_id, goodbye_message, reaction_roles_message_id, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(guild_id) DO UPDATE SET
+      welcome_channel_id = excluded.welcome_channel_id,
+      welcome_message = excluded.welcome_message,
+      goodbye_channel_id = excluded.goodbye_channel_id,
+      goodbye_message = excluded.goodbye_message,
+      reaction_roles_message_id = excluded.reaction_roles_message_id,
+      updated_at = excluded.updated_at
+  `).run(
+    guildId,
+    settings.welcomeChannelId || null,
+    settings.welcomeMessage || null,
+    settings.goodbyeChannelId || null,
+    settings.goodbyeMessage || null,
+    settings.reactionRolesMessageId || null,
+    now
+  );
+}
+
+// ========== REACTION ROLES ==========
+
+/**
+ * Add or replace a reaction role mapping
+ */
+async function addReactionRoleMapping(guildId, messageId, emoji, roleId) {
+  const database = getDatabase();
+  database.prepare(`
+    INSERT INTO reaction_roles (guild_id, message_id, emoji, role_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(guild_id, message_id, emoji) DO UPDATE SET
+      role_id = excluded.role_id
+  `).run(guildId, messageId, emoji, roleId);
+}
+
+/**
+ * Remove a reaction role mapping
+ */
+async function removeReactionRoleMapping(guildId, messageId, emoji) {
+  const database = getDatabase();
+  database.prepare('DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?')
+    .run(guildId, messageId, emoji);
+}
+
+/**
+ * Get all reaction role mappings for a message
+ */
+async function getReactionRoleMappingsForMessage(guildId, messageId) {
+  const database = getDatabase();
+  const rows = database.prepare('SELECT * FROM reaction_roles WHERE guild_id = ? AND message_id = ?')
+    .all(guildId, messageId);
+  return rows.map(r => ({ emoji: r.emoji, roleId: r.role_id }));
+}
+
+// ========== GIVEAWAYS ==========
+
+/**
+ * Create a giveaway
+ */
+async function createGiveaway(giveaway) {
+  const database = getDatabase();
+  const giveawayId = giveaway.giveawayId || `gw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  database.prepare(`
+    INSERT INTO giveaways (giveaway_id, guild_id, channel_id, message_id, prize, winner_count, end_time, created_by, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running')
+  `).run(
+    giveawayId,
+    giveaway.guildId,
+    giveaway.channelId,
+    giveaway.messageId || null,
+    giveaway.prize,
+    giveaway.winnerCount || 1,
+    giveaway.endTime,
+    giveaway.createdBy
+  );
+  return giveawayId;
+}
+
+/**
+ * Update giveaway message id after posting
+ */
+async function setGiveawayMessageId(giveawayId, messageId) {
+  const database = getDatabase();
+  database.prepare('UPDATE giveaways SET message_id = ? WHERE giveaway_id = ?')
+    .run(messageId, giveawayId);
+}
+
+/**
+ * Get giveaway by message id
+ */
+async function getGiveawayByMessageId(messageId) {
+  const database = getDatabase();
+  const row = database.prepare('SELECT * FROM giveaways WHERE message_id = ?').get(messageId);
+  return row || null;
+}
+
+/**
+ * Get active giveaways (optionally by guild)
+ */
+async function getActiveGiveaways(guildId = null) {
+  const database = getDatabase();
+  let query = "SELECT * FROM giveaways WHERE status = 'running'";
+  const params = [];
+  if (guildId) {
+    query += ' AND guild_id = ?';
+    params.push(guildId);
+  }
+  return database.prepare(query).all(...params);
+}
+
+/**
+ * Update giveaway status
+ */
+async function updateGiveawayStatus(giveawayId, status) {
+  const database = getDatabase();
+  database.prepare('UPDATE giveaways SET status = ? WHERE giveaway_id = ?')
+    .run(status, giveawayId);
+}
+
+/**
+ * Add giveaway entry
+ */
+async function addGiveawayEntry(giveawayId, userId) {
+  const database = getDatabase();
+  database.prepare('INSERT OR IGNORE INTO giveaway_entries (giveaway_id, user_id) VALUES (?, ?)')
+    .run(giveawayId, userId);
+}
+
+/**
+ * Get giveaway entries
+ */
+async function getGiveawayEntries(giveawayId) {
+  const database = getDatabase();
+  const rows = database.prepare('SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?').all(giveawayId);
+  return rows.map(r => r.user_id);
 }
 
 module.exports = {
@@ -978,5 +1200,20 @@ module.exports = {
   saveUserRankCardSettings,
   // Notification settings
   getUserNotificationSettings,
-  saveUserNotificationSettings
+  saveUserNotificationSettings,
+  // Guild settings
+  getGuildSettings,
+  saveGuildSettings,
+  // Reaction roles
+  addReactionRoleMapping,
+  removeReactionRoleMapping,
+  getReactionRoleMappingsForMessage,
+  // Giveaways
+  createGiveaway,
+  setGiveawayMessageId,
+  getGiveawayByMessageId,
+  getActiveGiveaways,
+  updateGiveawayStatus,
+  addGiveawayEntry,
+  getGiveawayEntries
 };

@@ -1,4 +1,4 @@
-const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Events, Partials } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
 const { TOKEN, CLIENT_ID, SERVER_ID } = require('./config');
@@ -11,8 +11,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
-  ] 
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 // Create a collection for commands
@@ -125,6 +127,14 @@ for (const file of commandFiles) {
         logger.error('Error processing voice sessions:', error);
       }
     }, 5 * 60 * 1000); // Process every 5 minutes
+
+    // Set up item expiration scheduler
+    const { startItemExpirationScheduler } = require('./jobs/itemExpiration');
+    startItemExpirationScheduler();
+
+    // Set up trade expiration scheduler
+    const { startTradeExpirationScheduler } = require('./jobs/tradeExpiration');
+    startTradeExpirationScheduler();
   } catch (error) {
     logger.error('Error during startup:', error);
     process.exit(1);

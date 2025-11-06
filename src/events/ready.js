@@ -18,5 +18,13 @@ module.exports = {
     
     // Set bot status
     client.user.setActivity('/help', { type: 'LISTENING' });
+
+    // Start giveaway scheduler
+    try {
+      const { startGiveawayScheduler } = require('../jobs/giveaways');
+      startGiveawayScheduler(client);
+    } catch (err) {
+      logger.error('Failed to start giveaway scheduler:', err);
+    }
   },
 }; 

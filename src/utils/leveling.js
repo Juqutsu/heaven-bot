@@ -1,13 +1,6 @@
 const { getUserData, saveUserData, calculateRequiredXp, calculateLevel, getRankSettings, getPrestigeSettings, getUserStatistics } = require('./database');
-const { createCanvas } = require('canvas');
-const {
-  drawBackground,
-  drawAvatar,
-  drawUsername,
-  drawLevelIndicator,
-  drawXpInfo,
-  drawProgressBar
-} = require('./rankCard');
+const { createCanvas, loadImage } = require('canvas');
+const { roundedRect } = require('./rankCard');
 const { getTotalMultiplier, applyMultiplier } = require('./multipliers');
 const { updateStreakForActivity } = require('./streaks');
 const { checkAchievements } = require('./achievements');
@@ -357,17 +350,28 @@ async function generateRankCard(member) {
   const userData = await getUserData(member.id);
   const rankSettings = await getRankSettings();
   const prestigeSettings = await getPrestigeSettings();
-  const { getUserRankCardSettings, getUserStreak } = require('./database');
+  const { getUserRankCardSettings } = require('./database');
+  const { mergeWithDefaults } = require('./rankCardDefaults');
   
   // Get custom rank card settings
-  const cardSettings = await getUserRankCardSettings(member.id);
+  const cardSettingsData = await getUserRankCardSettings(member.id);
+  
+  // Merge user settings with defaults
+  const settings = mergeWithDefaults(cardSettingsData.settings || {});
+  
+  // Override with prestige color if no custom primary color is set
+  if (!settings.primaryColor && userData.prestige > 0) {
+    const prestige = prestigeSettings.prestiges[userData.prestige];
+    if (prestige) {
+      settings.primaryColor = prestige.color;
+    }
+  }
   
   // Calculate XP progress more explicitly
   const totalXp = userData.xp;
   const currentLevel = userData.level;
   
   // Special handling for level 1
-  // Level 1 users start at 0 XP, not at the XP required for level 1
   const currentLevelXp = currentLevel === 1 ? 0 : await calculateRequiredXp(currentLevel);
   const nextLevelXp = await calculateRequiredXp(currentLevel + 1);
   
@@ -375,44 +379,195 @@ async function generateRankCard(member) {
   const xpForThisLevel = totalXp - currentLevelXp;
   const xpNeededForNextLevel = nextLevelXp - currentLevelXp;
   
-  // Calculate progress percentage (make sure to handle edge cases)
+  // Calculate progress percentage
   let progressPercent = 0;
   if (xpNeededForNextLevel > 0) {
     progressPercent = (xpForThisLevel / xpNeededForNextLevel) * 100;
     progressPercent = Math.max(0, Math.min(100, progressPercent));
   }
   
-  // Define color scheme - use custom colors if set, otherwise use prestige/default
-  const primaryColor = cardSettings.primaryColor || (userData.prestige > 0 
-    ? prestigeSettings.prestiges[userData.prestige].color 
-    : '#5865F2');
-  const secondaryColor = '#FFFFFF';
-  const bgColor = cardSettings.backgroundColor || '#1F2937';
-  const darkAccentColor = '#111827';
-  const lightAccentColor = '#374151';
+  // Get prestige info
+  const prestige = userData.prestige > 0 ? prestigeSettings.prestiges[userData.prestige] : null;
   
-  // Set up canvas with clean dimensions
-  const canvas = createCanvas(1000, 280);
+  // Determine canvas dimensions based on orientation
+  const isVertical = settings.orientation === 'vertical';
+  const width = isVertical ? 280 : 1000;
+  const height = isVertical ? 1000 : 280;
+  
+  // Set up canvas
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   
-  // Draw background and decorations
-  drawBackground(ctx, canvas.width, canvas.height, primaryColor, bgColor, darkAccentColor);
+  // Draw background
+  if (settings.backgroundStyle === 'gradient') {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, settings.backgroundColor || '#1F2937');
+    // Add alpha to primary color for gradient end
+    const primaryColorWithAlpha = (settings.primaryColor || '#5865F2') + '66'; // 40% opacity
+    gradient.addColorStop(1, primaryColorWithAlpha);
+    ctx.fillStyle = gradient;
+  } else {
+    ctx.fillStyle = settings.backgroundColor || '#1F2937';
+  }
+  roundedRect(ctx, 0, 0, width, height, 16);
+  ctx.fill();
+  
+  // Draw accent bar
+  ctx.fillStyle = settings.primaryColor || '#5865F2';
+  ctx.globalAlpha = settings.accentBarOpacity || 0.15;
+  if (settings.accentBarPosition === 'left') {
+    roundedRect(ctx, 0, 0, settings.accentBarWidth, height, [16, 0, 0, 16]);
+  } else if (settings.accentBarPosition === 'right') {
+    roundedRect(ctx, width - settings.accentBarWidth, 0, settings.accentBarWidth, height, [0, 16, 16, 0]);
+  } else if (settings.accentBarPosition === 'top') {
+    roundedRect(ctx, 0, 0, width, settings.accentBarWidth, [16, 16, 0, 0]);
+  } else {
+    roundedRect(ctx, 0, height - settings.accentBarWidth, width, settings.accentBarWidth, [0, 0, 16, 16]);
+  }
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  
+  // Apply shadow if enabled
+  if (settings.shadowEnabled) {
+    ctx.shadowBlur = settings.shadowBlur;
+    ctx.shadowOffsetX = settings.shadowOffsetX;
+    ctx.shadowOffsetY = settings.shadowOffsetY;
+    ctx.shadowColor = settings.shadowColor;
+  }
   
   // Draw avatar
-  await drawAvatar(ctx, member, 40, 40, 200, primaryColor, darkAccentColor);
+  if (settings.showAvatar) {
+    try {
+      const avatar = await loadImage(member.user.displayAvatarURL({ extension: 'png', size: 512 }));
+      const avatarX = settings.avatar.x;
+      const avatarY = settings.avatar.y;
+      const avatarSize = settings.avatarSize;
+      
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+      ctx.restore();
+      
+      // Avatar border
+      if (settings.avatarBorderWidth > 0) {
+        ctx.strokeStyle = settings.avatarBorderColor;
+        ctx.lineWidth = settings.avatarBorderWidth;
+        ctx.beginPath();
+        ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.stroke();
+      }
+    } catch (error) {
+      // Error loading avatar - continue without avatar
+    }
+  }
   
-  // Draw username and prestige badge
-  const prestige = userData.prestige > 0 ? prestigeSettings.prestiges[userData.prestige] : null;
-  drawUsername(ctx, member.user.username, 280, 100, primaryColor, secondaryColor, prestige);
+  // Reset shadow for text
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  
+  // Draw username
+  if (settings.showUsername) {
+    ctx.font = `600 ${settings.usernameFontSize}px Arial`;
+    ctx.textAlign = settings.usernameAlign;
+    ctx.fillStyle = settings.usernameColor;
+    let displayName = member.user.username;
+    if (displayName.length > 18) {
+      displayName = displayName.substring(0, 18) + '...';
+    }
+    const usernameX = settings.usernameAlign === 'center' ? width / 2 : 
+                      settings.usernameAlign === 'right' ? width - settings.username.x : 
+                      settings.username.x;
+    ctx.fillText(displayName, usernameX, settings.username.y);
+  }
+  
+  // Draw prestige badge
+  if (settings.showPrestige && prestige) {
+    ctx.font = `${settings.prestigeFontSize}px Arial`;
+    ctx.textAlign = settings.prestigeAlign;
+    ctx.fillStyle = settings.prestigeColor;
+    const prestigeX = settings.prestigeAlign === 'center' ? width / 2 : 
+                      settings.prestigeAlign === 'right' ? width - settings.prestige.x : 
+                      settings.prestige.x;
+    ctx.fillText(`★ ${prestige.name}`, prestigeX, settings.prestige.y);
+  }
   
   // Draw level indicator
-  drawLevelIndicator(ctx, userData.level, 960, 100, primaryColor, secondaryColor);
+  if (settings.showLevel) {
+    // Level label
+    ctx.font = `500 ${settings.levelLabelFontSize}px Arial`;
+    ctx.textAlign = settings.levelAlign;
+    ctx.fillStyle = '#9CA3AF';
+    const levelX = settings.levelAlign === 'center' ? width / 2 : 
+                   settings.levelAlign === 'right' ? width - settings.level.x : 
+                   settings.level.x;
+    ctx.fillText('LEVEL', levelX, settings.level.y - 8);
+    
+    // Level number
+    ctx.font = `600 ${settings.levelFontSize}px Arial`;
+    ctx.fillStyle = settings.levelColor;
+    ctx.fillText(`${userData.level}`, levelX, settings.level.y + 28);
+  }
   
-  // Draw XP information
-  drawXpInfo(ctx, totalXp, nextLevelXp, 280, 140, secondaryColor);
+  // Draw XP info
+  if (settings.showXpInfo) {
+    ctx.font = `500 ${settings.xpFontSize}px Arial`;
+    ctx.textAlign = settings.xpAlign;
+    ctx.fillStyle = settings.xpTextColor;
+    const xpX = settings.xpAlign === 'center' ? width / 2 : 
+                 settings.xpAlign === 'right' ? width - settings.xpInfo.x : 
+                 settings.xpInfo.x;
+    ctx.fillText(`${totalXp.toLocaleString()} / ${nextLevelXp.toLocaleString()} XP`, xpX, settings.xpInfo.y);
+  }
   
   // Draw progress bar
-  drawProgressBar(ctx, progressPercent, 280, 180, 680, 24, primaryColor, lightAccentColor, secondaryColor);
+  if (settings.showProgressBar) {
+    const barX = settings.progressBar.x;
+    const barY = settings.progressBar.y;
+    const barWidth = settings.progressBarWidth;
+    const barHeight = settings.progressBarHeight;
+    const cornerRadius = settings.progressBarStyle === 'rounded' ? barHeight / 2 : 0;
+    
+    // Bar background
+    roundedRect(ctx, barX, barY, barWidth, barHeight, cornerRadius);
+    ctx.fillStyle = settings.progressBarBgColor;
+    ctx.fill();
+    
+    // Progress fill
+    const progressWidth = Math.max(1, (progressPercent / 100) * barWidth);
+    if (progressWidth > 0) {
+      if (settings.progressBarStyle === 'gradient') {
+        const gradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
+        gradient.addColorStop(0, settings.progressBarFillColor || '#5865F2');
+        gradient.addColorStop(1, settings.primaryColor || '#5865F2');
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = settings.progressBarFillColor || '#5865F2';
+      }
+      
+      const topLeft = cornerRadius;
+      const bottomLeft = cornerRadius;
+      const topRight = progressWidth >= barWidth ? cornerRadius : 0;
+      const bottomRight = progressWidth >= barWidth ? cornerRadius : 0;
+      roundedRect(ctx, barX, barY, progressWidth, barHeight, [topLeft, topRight, bottomRight, bottomLeft]);
+      ctx.fill();
+    }
+    
+    // Percentage text
+    if (settings.showProgressText) {
+      ctx.font = `500 ${settings.progressBarTextFontSize}px Arial`;
+      ctx.textAlign = settings.progressTextAlign;
+      ctx.fillStyle = settings.progressBarTextColor;
+      const textX = settings.progressTextAlign === 'center' ? barX + barWidth / 2 : 
+                    settings.progressTextAlign === 'right' ? barX + barWidth - 8 : 
+                    barX + 8;
+      ctx.fillText(`${progressPercent.toFixed(1)}%`, textX, barY + barHeight - 6);
+    }
+  }
   
   return canvas.toBuffer();
 }

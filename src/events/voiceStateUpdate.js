@@ -3,6 +3,7 @@ const { updateVoiceXp, checkRoleRewards, checkPrestige } = require('../utils/lev
 const { updateVoiceStats } = require('../utils/statistics');
 const { getUserData, saveUserData } = require('../utils/database');
 const logger = require('../utils/logger');
+const { getCurrencySettings, earnCoins } = require('../utils/economy');
 
 // Cache for voice sessions
 const voiceSessionCache = new Map();
@@ -12,10 +13,14 @@ module.exports = {
   async execute(oldState, newState) {
     try {
       // Validate states
-      if (!oldState || !newState) return;
-      
+      if (!oldState || !newState) {
+        return;
+      }
+
       // Ignore bots
-      if (!newState.member || !newState.member.user || newState.member.user.bot) return;
+      if (!newState.member || !newState.member.user || newState.member.user.bot) {
+        return;
+      }
       
       const userId = newState.member.user.id;
       
@@ -27,7 +32,7 @@ module.exports = {
           const userData = await getUserData(userId);
           userData.voiceJoinTimestamp = timestamp;
           await saveUserData(userId, userData);
-          
+
           // Add to cache
           voiceSessionCache.set(userId, {
             channelId: newState.channelId,
@@ -37,14 +42,13 @@ module.exports = {
         } catch (joinError) {
           logger.error('Error handling voice join:', joinError);
         }
-      }
-      
-      // User left a voice channel
-      else if (oldState.channelId && !newState.channelId) {
+      } else if (oldState.channelId && !newState.channelId) {
         try {
           // Get voice session data
           const sessionData = voiceSessionCache.get(userId);
-          if (!sessionData) return;
+          if (!sessionData) {
+            return;
+          }
           
           // Calculate time spent in voice
           const leaveTime = Date.now();
@@ -65,6 +69,21 @@ module.exports = {
             try {
               // Award XP for voice time
               const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client, newState.member);
+              // Award coins for voice time (if not AFK)
+              try {
+                const settings = await getCurrencySettings();
+                const perMinute = Math.max(0, settings.voiceCoinsPerMinute || 0);
+                const maxMinutes = Math.max(0, settings.voiceMaxMinutes || 60);
+                if (!wasAFK && perMinute > 0) {
+                  const eligibleMinutes = Math.min(minutesInVoice, maxMinutes);
+                  const coinsToAward = eligibleMinutes * perMinute;
+                  if (coinsToAward > 0) {
+                    await earnCoins(userId, coinsToAward, 'voice');
+                  }
+                }
+              } catch (coinErr) {
+                logger.error('Error awarding voice coins:', coinErr);
+              }
               
               // Handle level up
               if (levelUpInfo && newState.member) {
@@ -110,10 +129,7 @@ module.exports = {
           // Try to clean up cache anyway
           voiceSessionCache.delete(userId);
         }
-      }
-      
-      // User moved between voice channels
-      else if (oldState.channelId !== newState.channelId) {
+      } else if (oldState.channelId !== newState.channelId) {
         try {
           // Get voice session data
           const sessionData = voiceSessionCache.get(userId);
@@ -142,6 +158,21 @@ module.exports = {
               
               // Award XP for voice time
               const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client, newState.member);
+              // Award coins for voice time (if not AFK)
+              try {
+                const settings = await getCurrencySettings();
+                const perMinute = Math.max(0, settings.voiceCoinsPerMinute || 0);
+                const maxMinutes = Math.max(0, settings.voiceMaxMinutes || 60);
+                if (!wasAFK && perMinute > 0) {
+                  const eligibleMinutes = Math.min(minutesInVoice, maxMinutes);
+                  const coinsToAward = eligibleMinutes * perMinute;
+                  if (coinsToAward > 0) {
+                    await earnCoins(userId, coinsToAward, 'voice');
+                  }
+                }
+              } catch (coinErr) {
+                logger.error('Error awarding voice coins on move:', coinErr);
+              }
               
               // Handle level up
               if (levelUpInfo && newState.member) {
@@ -254,6 +285,21 @@ module.exports = {
               try {
                 // Award XP for voice time
                 const levelUpInfo = await updateVoiceXp(userId, minutesSinceUpdate, isAFK, client, member);
+                // Award coins for voice time (if not AFK)
+                try {
+                  const settings = await getCurrencySettings();
+                  const perMinute = Math.max(0, settings.voiceCoinsPerMinute || 0);
+                  const maxMinutes = Math.max(0, settings.voiceMaxMinutes || 60);
+                  if (!isAFK && perMinute > 0) {
+                    const eligibleMinutes = Math.min(minutesSinceUpdate, maxMinutes);
+                    const coinsToAward = eligibleMinutes * perMinute;
+                    if (coinsToAward > 0) {
+                      await earnCoins(userId, coinsToAward, 'voice');
+                    }
+                  }
+                } catch (coinErr) {
+                  logger.error(`Error awarding voice coins for ${userId}:`, coinErr);
+                }
                 
                 // Handle level up
                 if (levelUpInfo) {
