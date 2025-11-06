@@ -48,7 +48,7 @@ module.exports = {
   
   async execute(interaction) {
     // Update command stats
-    updateCommandStats(interaction.user.id, 'prestige');
+    await updateCommandStats(interaction.user.id, 'prestige');
     
     const subcommand = interaction.options.getSubcommand();
     
@@ -65,7 +65,7 @@ module.exports = {
  * @param {Object} interaction - Command interaction
  */
 async function handleListCommand(interaction) {
-  const prestigeSettings = getPrestigeSettings();
+  const prestigeSettings = await getPrestigeSettings();
   
   // Create embed
   const embed = new EmbedBuilder()
@@ -148,7 +148,7 @@ async function handleSetCommand(interaction) {
   }
   
   // Update settings
-  const prestigeSettings = getPrestigeSettings();
+  const prestigeSettings = await getPrestigeSettings();
   const currentConfig = prestigeSettings.prestiges[prestigeLevel] || {
     name: `Prestige ${prestigeLevel}`,
     requiredLevel: prestigeLevel * 100,
@@ -185,7 +185,7 @@ async function handleSetCommand(interaction) {
   }
   
   prestigeSettings.prestiges[prestigeLevel] = currentConfig;
-  savePrestigeSettings(prestigeSettings);
+  await savePrestigeSettings(prestigeSettings);
   
   await interaction.reply({ 
     content: `✅ Successfully updated Prestige ${prestigeLevel} settings:\n- ${changes.join('\n- ')}`,

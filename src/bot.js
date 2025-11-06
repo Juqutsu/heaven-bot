@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { TOKEN, CLIENT_ID, SERVER_ID } = require('./config');
 const { deployCommands } = require('./utils/deployCommands');
+const logger = require('./utils/logger');
 
 // Create a new client instance
 const client = new Client({ 
@@ -19,25 +20,25 @@ client.commands = new Collection();
 
 // Global error handler
 process.on('uncaughtException', err => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception:', err);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection at:', { promise, reason });
 });
 
 // Set up Discord.js error handling
 client.on(Events.Error, error => {
-  console.error('Discord client error:', error);
+  logger.error('Discord client error:', error);
 });
 
 client.on(Events.Debug, info => {
-  // Uncomment for debugging
-  // console.log('Debug:', info);
+  logger.debug('Discord debug:', info);
 });
 
 client.on(Events.Warn, warning => {
-  console.warn('Warning:', warning);
+  logger.warn('Discord warning:', warning);
 });
 
 // Load event handlers
@@ -53,7 +54,7 @@ for (const file of eventFiles) {
         try {
           event.execute(...args);
         } catch (error) {
-          console.error(`Error in once event ${event.name}:`, error);
+          logger.error(`Error in once event ${event.name}:`, error);
         }
       });
     } else {
@@ -61,13 +62,13 @@ for (const file of eventFiles) {
         try {
           event.execute(...args);
         } catch (error) {
-          console.error(`Error in event ${event.name}:`, error);
+          logger.error(`Error in event ${event.name}:`, error);
         }
       });
     }
-    console.log(`Loaded event: ${event.name}`);
+    logger.info(`Loaded event: ${event.name}`);
   } catch (error) {
-    console.error(`Error loading event file ${file}:`, error);
+    logger.error(`Error loading event file ${file}:`, error);
   }
 }
 
@@ -82,12 +83,12 @@ for (const file of commandFiles) {
     // Set a new item in the Collection with the key as the command name and the value as the exported module
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
-      console.log(`Loaded command: ${command.data.name}`);
+      logger.info(`Loaded command: ${command.data.name}`);
     } else {
-      console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+      logger.warn(`The command at ${filePath} is missing a required "data" or "execute" property.`);
     }
   } catch (error) {
-    console.error(`Error loading command file ${file}:`, error);
+    logger.error(`Error loading command file ${file}:`, error);
   }
 }
 
@@ -96,25 +97,36 @@ for (const file of commandFiles) {
 (async () => {
   try {
     // Deploy commands before bot login
+    logger.info('Deploying commands...');
     const deployResult = await deployCommands(TOKEN, CLIENT_ID, SERVER_ID);
     if (!deployResult.success) {
-      console.error('Failed to deploy commands:', deployResult.error);
+      logger.error('Failed to deploy commands:', deployResult.error);
+    } else {
+      logger.info(`Successfully deployed ${deployResult.count} commands`);
     }
     
+    // Initialize database
+    logger.info('Initializing database...');
+    const { initializeDatabase } = require('./utils/database');
+    await initializeDatabase();
+    logger.info('Database initialized');
+    
     // Log in to Discord with the client's token
+    logger.info('Logging in to Discord...');
     await client.login(TOKEN);
+    logger.info('Bot logged in successfully');
     
     // Set up voice XP timer
     const voiceStateHandler = require('./events/voiceStateUpdate');
-    setInterval(() => {
+    setInterval(async () => {
       try {
-        voiceStateHandler.processActiveVoiceSessions(client);
+        await voiceStateHandler.processActiveVoiceSessions(client);
       } catch (error) {
-        console.error('Error processing voice sessions:', error);
+        logger.error('Error processing voice sessions:', error);
       }
     }, 5 * 60 * 1000); // Process every 5 minutes
   } catch (error) {
-    console.error('Error during startup:', error);
+    logger.error('Error during startup:', error);
     process.exit(1);
   }
 })();

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
+const logger = require('../utils/logger');
 require('../config');
 
 module.exports = {
@@ -73,7 +74,7 @@ module.exports = {
       });
       
     } catch (error) {
-      console.error('Error setting bug channel:', error);
+      logger.error('Error setting bug channel:', error);
       await interaction.reply({
         content: 'There was an error while setting the bug report channel. Please try again later.',
         ephemeral: true

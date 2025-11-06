@@ -90,29 +90,40 @@ module.exports = {
         return;
       }
       
-      // Create buttons for bug report management
+      // Send the bug report to the channel first to get message ID
+      const sentMessage = await bugsChannel.send({ 
+        embeds: [bugEmbed]
+      });
+      
+      // Use message ID instead of user ID for security
+      const messageId = sentMessage.id;
+      
+      // Create buttons for bug report management with message ID
       const actionRow = new ActionRowBuilder()
         .addComponents(
           new ButtonBuilder()
-            .setCustomId(`bug_inprogress_${interaction.user.id}`)
+            .setCustomId(`bug_inprogress_${messageId}`)
             .setLabel('🔧 In Progress')
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
-            .setCustomId(`bug_fixed_${interaction.user.id}`)
+            .setCustomId(`bug_fixed_${messageId}`)
             .setLabel('✅ Fixed')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
-            .setCustomId(`bug_invalid_${interaction.user.id}`)
+            .setCustomId(`bug_invalid_${messageId}`)
             .setLabel('❌ Invalid')
             .setStyle(ButtonStyle.Danger),
           new ButtonBuilder()
-            .setCustomId(`bug_wontfix_${interaction.user.id}`)
+            .setCustomId(`bug_wontfix_${messageId}`)
             .setLabel('⏭️ Won\'t Fix')
             .setStyle(ButtonStyle.Secondary)
         );
       
-      // Send the bug report to the channel with action buttons
-      await bugsChannel.send({ 
+      // Store message ID and user ID mapping in embed footer for retrieval
+      bugEmbed.setFooter({ text: `Report ID: ${messageId} | User ID: ${interaction.user.id}` });
+      
+      // Update message with buttons and footer
+      await sentMessage.edit({ 
         embeds: [bugEmbed],
         components: [actionRow]
       });
@@ -123,7 +134,7 @@ module.exports = {
         ephemeral: true 
       });
     } catch (error) {
-      console.error('Error handling bug report:', error);
+      logger.error('Error handling bug report:', error);
       await interaction.reply({ 
         content: 'There was an error while submitting your bug report. Please try again later.',
         ephemeral: true 
@@ -134,14 +145,22 @@ module.exports = {
   // Button interaction handler
   async buttonInteract(interaction) {
     try {
-      // Extract status and user ID from button custom ID
-      // Format: bug_[status]_[userId]
-      const [_, status, userId] = interaction.customId.split('_');
+      // Extract status and message ID from button custom ID
+      // Format: bug_[status]_[messageId]
+      const parts = interaction.customId.split('_');
+      if (parts.length < 3) {
+        await interaction.reply({
+          content: 'Error: Invalid button interaction.',
+          ephemeral: true
+        });
+        return;
+      }
+      
+      const status = parts[1];
+      const messageId = parts.slice(2).join('_'); // Handle message IDs that might have underscores
       
       // Check if user has admin permissions
-      const isAdmin = interaction.member.permissions.has('Administrator');
-      
-      if (!isAdmin) {
+      if (!interaction.member || !interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
           content: 'You do not have permission to manage bug reports.',
           ephemeral: true
@@ -151,12 +170,28 @@ module.exports = {
       
       // Get the message that contains the bug report
       const message = interaction.message;
-      const embed = message.embeds[0];
-      
-      // Skip if no embed found
-      if (!embed) {
+      if (!message || !message.embeds || message.embeds.length === 0) {
         await interaction.reply({
           content: 'Error: Could not find the bug report embed.',
+          ephemeral: true
+        });
+        return;
+      }
+      
+      const embed = message.embeds[0];
+      
+      // Extract user ID from embed footer
+      let userId = null;
+      if (embed.footer && embed.footer.text) {
+        const footerMatch = embed.footer.text.match(/User ID: (\d+)/);
+        if (footerMatch) {
+          userId = footerMatch[1];
+        }
+      }
+      
+      if (!userId) {
+        await interaction.reply({
+          content: 'Error: Could not find the user who reported this bug.',
           ephemeral: true
         });
         return;
@@ -237,7 +272,7 @@ module.exports = {
           await user.send({ embeds: [notificationEmbed] });
         }
       } catch (dmError) {
-        console.log(`Could not DM user ${userId}: ${dmError.message}`);
+        logger.warn(`Could not DM user ${userId}: ${dmError.message}`);
       }
       
       // Reply to the interaction
@@ -247,7 +282,7 @@ module.exports = {
       });
       
     } catch (error) {
-      console.error('Error handling button interaction:', error);
+      logger.error('Error handling button interaction:', error);
       await interaction.reply({
         content: 'There was an error while updating the bug report status.',
         ephemeral: true

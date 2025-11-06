@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { BUGS_CHANNEL_ID } = require('../config');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -82,7 +83,7 @@ module.exports = {
       
       await interaction.editReply({ embeds: [statsEmbed] });
     } catch (error) {
-      console.error('Error generating bug statistics:', error);
+      logger.error('Error generating bug statistics:', error);
       await interaction.reply({ 
         content: 'There was an error while generating bug statistics. Please try again later.',
         ephemeral: true 

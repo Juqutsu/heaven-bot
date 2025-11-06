@@ -4,8 +4,8 @@ const { getUserStatistics, saveUserStatistics } = require('./database');
  * Update message statistics for a user
  * @param {string} userId - User ID
  */
-function updateMessageStats(userId) {
-  const stats = getUserStatistics(userId);
+async function updateMessageStats(userId) {
+  const stats = await getUserStatistics(userId);
   const date = new Date();
   
   // Increment total messages
@@ -27,7 +27,7 @@ function updateMessageStats(userId) {
   pruneOldStats(stats.messages);
   
   // Save updated statistics
-  saveUserStatistics(userId, stats);
+  await saveUserStatistics(userId, stats);
 }
 
 /**
@@ -35,8 +35,8 @@ function updateMessageStats(userId) {
  * @param {string} userId - User ID
  * @param {number} minutes - Minutes to add
  */
-function updateVoiceStats(userId, minutes) {
-  const stats = getUserStatistics(userId);
+async function updateVoiceStats(userId, minutes) {
+  const stats = await getUserStatistics(userId);
   const date = new Date();
   
   // Increment total voice minutes
@@ -58,7 +58,7 @@ function updateVoiceStats(userId, minutes) {
   pruneOldStats(stats.voice);
   
   // Save updated statistics
-  saveUserStatistics(userId, stats);
+  await saveUserStatistics(userId, stats);
 }
 
 /**
@@ -66,8 +66,8 @@ function updateVoiceStats(userId, minutes) {
  * @param {string} userId - User ID
  * @param {string} commandName - Name of the command used
  */
-function updateCommandStats(userId, commandName) {
-  const stats = getUserStatistics(userId);
+async function updateCommandStats(userId, commandName) {
+  const stats = await getUserStatistics(userId);
   
   // Increment total commands
   stats.commands.total++;
@@ -76,17 +76,17 @@ function updateCommandStats(userId, commandName) {
   stats.commands.types[commandName] = (stats.commands.types[commandName] || 0) + 1;
   
   // Save updated statistics
-  saveUserStatistics(userId, stats);
+  await saveUserStatistics(userId, stats);
 }
 
 /**
  * Get recent statistics for a user
  * @param {string} userId - User ID
  * @param {number} days - Number of days to look back
- * @returns {Object} Recent statistics
+ * @returns {Promise<Object>} Recent statistics
  */
-function getRecentStats(userId, days = 7) {
-  const stats = getUserStatistics(userId);
+async function getRecentStats(userId, days = 7) {
+  const stats = await getUserStatistics(userId);
   const date = new Date();
   const result = {
     messages: {

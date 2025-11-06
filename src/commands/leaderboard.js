@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getLeaderboard } = require('../utils/leveling');
 const { getPrestigeSettings } = require('../utils/database');
 const { updateCommandStats } = require('../utils/statistics');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,16 +21,16 @@ module.exports = {
     
     try {
       // Update command stats
-      updateCommandStats(interaction.user.id, 'leaderboard');
+      await updateCommandStats(interaction.user.id, 'leaderboard');
       
       // Get limit
       const limit = interaction.options.getInteger('limit') || 10;
       
       // Get leaderboard data
-      const leaderboardData = getLeaderboard(limit);
+      const leaderboardData = await getLeaderboard(limit);
       
       // Get prestige settings for colors
-      const prestigeSettings = getPrestigeSettings();
+      const prestigeSettings = await getPrestigeSettings();
       
       // Create embed
       const embed = new EmbedBuilder()
@@ -75,7 +76,7 @@ module.exports = {
           
           position++;
         } catch (error) {
-          console.error(`Error processing leaderboard entry for ${data.userId}:`, error);
+          logger.error(`Error processing leaderboard entry for ${data.userId}:`, error);
         }
       }
       
@@ -84,7 +85,7 @@ module.exports = {
       // Send leaderboard
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('Error generating leaderboard:', error);
+      logger.error('Error generating leaderboard:', error);
       await interaction.editReply('There was an error generating the leaderboard. Please try again later.');
     }
   },

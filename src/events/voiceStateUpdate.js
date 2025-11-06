@@ -2,6 +2,7 @@ const { Events } = require('discord.js');
 const { updateVoiceXp, checkRoleRewards, checkPrestige } = require('../utils/leveling');
 const { updateVoiceStats } = require('../utils/statistics');
 const { getUserData, saveUserData } = require('../utils/database');
+const logger = require('../utils/logger');
 
 // Cache for voice sessions
 const voiceSessionCache = new Map();
@@ -23,9 +24,9 @@ module.exports = {
         try {
           // Store join timestamp
           const timestamp = Date.now();
-          const userData = getUserData(userId);
+          const userData = await getUserData(userId);
           userData.voiceJoinTimestamp = timestamp;
-          saveUserData(userId, userData);
+          await saveUserData(userId, userData);
           
           // Add to cache
           voiceSessionCache.set(userId, {
@@ -34,7 +35,7 @@ module.exports = {
             lastUpdate: timestamp
           });
         } catch (joinError) {
-          console.error('Error handling voice join:', joinError);
+          logger.error('Error handling voice join:', joinError);
         }
       }
       
@@ -52,9 +53,9 @@ module.exports = {
           if (minutesInVoice > 0) {
             try {
               // Update voice statistics
-              updateVoiceStats(userId, minutesInVoice);
+              await updateVoiceStats(userId, minutesInVoice);
             } catch (statsError) {
-              console.error('Error updating voice statistics:', statsError);
+              logger.error('Error updating voice statistics:', statsError);
             }
             
             // Check if user was AFK
@@ -63,36 +64,49 @@ module.exports = {
             
             try {
               // Award XP for voice time
-              const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client);
+              const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client, newState.member);
               
               // Handle level up
               if (levelUpInfo && newState.member) {
                 try {
                   // Check for role rewards
-                  await checkRoleRewards(newState.member, levelUpInfo.newLevel);
-                } catch (roleError) {
-                  console.error('Error checking role rewards:', roleError);
-                }
-                
-                try {
+                  const roleRewards = await checkRoleRewards(newState.member, levelUpInfo.newLevel);
+                  
                   // Check for prestige
-                  await checkPrestige(newState.member, levelUpInfo.newLevel);
-                } catch (prestigeError) {
-                  console.error('Error checking prestige:', prestigeError);
+                  const prestigeInfo = await checkPrestige(newState.member, levelUpInfo.newLevel);
+                  
+                  // Send DM notification if enabled
+                  const { sendLevelUpNotification } = require('../utils/notifications');
+                  try {
+                    await sendLevelUpNotification(newState.member.user, levelUpInfo, roleRewards, prestigeInfo);
+                  } catch (dmError) {
+                    // User may have DMs disabled, ignore
+                  }
+                  
+                  // Check for achievement unlocks
+                  if (levelUpInfo.achievements && levelUpInfo.achievements.length > 0) {
+                    const { sendAchievementNotification } = require('../utils/notifications');
+                    for (const achievement of levelUpInfo.achievements) {
+                      try {
+                        await sendAchievementNotification(newState.member.user, achievement);
+                      } catch (achievementError) {
+                        logger.error('Error sending achievement notification:', achievementError);
+                      }
+                    }
+                  }
+                } catch (roleError) {
+                  logger.error('Error checking role rewards:', roleError);
                 }
-                
-                // We don't send a notification here to avoid spamming
-                // Users can check their rank with the rank command
               }
             } catch (xpError) {
-              console.error('Error handling voice XP:', xpError);
+              logger.error('Error handling voice XP:', xpError);
             }
           }
           
           // Remove from cache
           voiceSessionCache.delete(userId);
         } catch (leaveError) {
-          console.error('Error handling voice leave:', leaveError);
+          logger.error('Error handling voice leave:', leaveError);
           // Try to clean up cache anyway
           voiceSessionCache.delete(userId);
         }
@@ -124,29 +138,45 @@ module.exports = {
                 oldState.channelId === oldState.guild.afkChannelId : false;
               
               // Update voice statistics
-              updateVoiceStats(userId, minutesInVoice);
+              await updateVoiceStats(userId, minutesInVoice);
               
               // Award XP for voice time
-              const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client);
+              const levelUpInfo = await updateVoiceXp(userId, minutesInVoice, wasAFK, newState.client, newState.member);
               
               // Handle level up
               if (levelUpInfo && newState.member) {
                 try {
                   // Check for role rewards
-                  await checkRoleRewards(newState.member, levelUpInfo.newLevel);
-                } catch (roleError) {
-                  console.error('Error checking role rewards on move:', roleError);
-                }
-                
-                try {
+                  const roleRewards = await checkRoleRewards(newState.member, levelUpInfo.newLevel);
+                  
                   // Check for prestige
-                  await checkPrestige(newState.member, levelUpInfo.newLevel);
-                } catch (prestigeError) {
-                  console.error('Error checking prestige on move:', prestigeError);
+                  const prestigeInfo = await checkPrestige(newState.member, levelUpInfo.newLevel);
+                  
+                  // Send DM notification if enabled
+                  const { sendLevelUpNotification } = require('../utils/notifications');
+                  try {
+                    await sendLevelUpNotification(newState.member.user, levelUpInfo, roleRewards, prestigeInfo);
+                  } catch (dmError) {
+                    // User may have DMs disabled, ignore
+                  }
+                  
+                  // Check for achievement unlocks
+                  if (levelUpInfo.achievements && levelUpInfo.achievements.length > 0) {
+                    const { sendAchievementNotification } = require('../utils/notifications');
+                    for (const achievement of levelUpInfo.achievements) {
+                      try {
+                        await sendAchievementNotification(newState.member.user, achievement);
+                      } catch (achievementError) {
+                        logger.error('Error sending achievement notification:', achievementError);
+                      }
+                    }
+                  }
+                } catch (roleError) {
+                  logger.error('Error checking role rewards on move:', roleError);
                 }
               }
             } catch (moveXpError) {
-              console.error('Error handling voice move XP:', moveXpError);
+              logger.error('Error handling voice move XP:', moveXpError);
             }
           }
           
@@ -155,14 +185,14 @@ module.exports = {
           sessionData.lastUpdate = moveTime;
           voiceSessionCache.set(userId, sessionData);
         } catch (moveError) {
-          console.error('Error handling voice move:', moveError);
+          logger.error('Error handling voice move:', moveError);
         }
       }
       
       // User muted/unmuted/deafened/undeafened but stayed in the same channel
       // We don't handle these events for XP purposes
     } catch (error) {
-      console.error('Error handling voice state update:', error);
+      logger.error('Error handling voice state update:', error);
     }
   },
   
@@ -173,7 +203,7 @@ module.exports = {
   async processActiveVoiceSessions(client) {
     try {
       if (!client || !client.guilds) {
-        console.error('Invalid client for processing voice sessions');
+        logger.error('Invalid client for processing voice sessions');
         return;
       }
     
@@ -190,7 +220,7 @@ module.exports = {
                 client.guilds.cache.first() : null;
                 
               if (!guild) {
-                console.warn('No guild found for voice session processing');
+                logger.warn('No guild found for voice session processing');
                 continue;
               }
               
@@ -216,48 +246,64 @@ module.exports = {
               
               try {
                 // Update voice statistics
-                updateVoiceStats(userId, minutesSinceUpdate);
+                await updateVoiceStats(userId, minutesSinceUpdate);
               } catch (statsError) {
-                console.error(`Error updating voice statistics for ${userId}:`, statsError);
+                logger.error(`Error updating voice statistics for ${userId}:`, statsError);
               }
               
               try {
                 // Award XP for voice time
-                const levelUpInfo = await updateVoiceXp(userId, minutesSinceUpdate, isAFK, client);
+                const levelUpInfo = await updateVoiceXp(userId, minutesSinceUpdate, isAFK, client, member);
                 
                 // Handle level up
                 if (levelUpInfo) {
                   try {
                     // Check for role rewards
-                    await checkRoleRewards(member, levelUpInfo.newLevel);
-                  } catch (roleError) {
-                    console.error(`Error checking role rewards for ${userId}:`, roleError);
-                  }
-                  
-                  try {
+                    const roleRewards = await checkRoleRewards(member, levelUpInfo.newLevel);
+                    
                     // Check for prestige
-                    await checkPrestige(member, levelUpInfo.newLevel);
-                  } catch (prestigeError) {
-                    console.error(`Error checking prestige for ${userId}:`, prestigeError);
+                    const prestigeInfo = await checkPrestige(member, levelUpInfo.newLevel);
+                    
+                    // Send DM notification if enabled
+                    const { sendLevelUpNotification } = require('../utils/notifications');
+                    try {
+                      await sendLevelUpNotification(member.user, levelUpInfo, roleRewards, prestigeInfo);
+                    } catch (dmError) {
+                      // User may have DMs disabled, ignore
+                    }
+                    
+                    // Check for achievement unlocks
+                    if (levelUpInfo.achievements && levelUpInfo.achievements.length > 0) {
+                      const { sendAchievementNotification } = require('../utils/notifications');
+                      for (const achievement of levelUpInfo.achievements) {
+                        try {
+                          await sendAchievementNotification(member.user, achievement);
+                        } catch (achievementError) {
+                          logger.error('Error sending achievement notification:', achievementError);
+                        }
+                      }
+                    }
+                  } catch (roleError) {
+                    logger.error(`Error checking role rewards for ${userId}:`, roleError);
                   }
                 }
               } catch (xpError) {
-                console.error(`Error processing voice XP for ${userId}:`, xpError);
+                logger.error(`Error processing voice XP for ${userId}:`, xpError);
               }
               
               // Update session data
               sessionData.lastUpdate = now;
               voiceSessionCache.set(userId, sessionData);
             } catch (memberError) {
-              console.error(`Error processing member ${userId}:`, memberError);
+              logger.error(`Error processing member ${userId}:`, memberError);
             }
           }
         } catch (sessionError) {
-          console.error(`Error processing voice session for ${userId}:`, sessionError);
+          logger.error(`Error processing voice session for ${userId}:`, sessionError);
         }
       }
     } catch (error) {
-      console.error('Error in processActiveVoiceSessions:', error);
+      logger.error('Error in processActiveVoiceSessions:', error);
     }
   }
 }; 

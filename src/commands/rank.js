@@ -2,6 +2,7 @@ const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { generateRankCard } = require('../utils/leveling');
 const { getUserData, calculateRequiredXp } = require('../utils/database');
 const { updateCommandStats } = require('../utils/statistics');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -18,7 +19,7 @@ module.exports = {
     
     try {
       // Update command stats
-      updateCommandStats(interaction.user.id, 'rank');
+      await updateCommandStats(interaction.user.id, 'rank');
       
       // Get target user
       const targetUser = interaction.options.getUser('user') || interaction.user;
@@ -35,7 +36,7 @@ module.exports = {
         files: [attachment]
       });
     } catch (error) {
-      console.error('Error generating rank card:', error);
+      logger.error('Error generating rank card:', error);
       await interaction.editReply('There was an error generating the rank card. Please try again later.');
     }
   },

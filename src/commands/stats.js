@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getRecentStats } = require('../utils/statistics');
 const { getUserData } = require('../utils/database');
 const { updateCommandStats } = require('../utils/statistics');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,15 +26,17 @@ module.exports = {
     
     try {
       // Update command stats
-      updateCommandStats(interaction.user.id, 'stats');
+      await updateCommandStats(interaction.user.id, 'stats');
       
       // Get target user
       const targetUser = interaction.options.getUser('user') || interaction.user;
       const days = interaction.options.getInteger('days') || 7;
       
       // Get stats
-      const recentStats = getRecentStats(targetUser.id, days);
-      const userData = getUserData(targetUser.id);
+      const [recentStats, userData] = await Promise.all([
+        getRecentStats(targetUser.id, days),
+        getUserData(targetUser.id)
+      ]);
       
       // Create embed
       const embed = new EmbedBuilder()
@@ -75,7 +78,7 @@ module.exports = {
       // Send stats
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('Error generating statistics:', error);
+      logger.error('Error generating statistics:', error);
       await interaction.editReply('There was an error generating the statistics. Please try again later.');
     }
   },

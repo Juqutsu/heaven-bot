@@ -32,3 +32,12 @@ coverage/
 
 # Mac system files
 .DS_Store
+
+# Test files
+test-data/
+coverage/
+
+# Database files
+*.db-shm
+*.db-wal
+data/backups/

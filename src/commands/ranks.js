@@ -62,7 +62,7 @@ module.exports = {
   
   async execute(interaction) {
     // Update command stats
-    updateCommandStats(interaction.user.id, 'ranks');
+    await updateCommandStats(interaction.user.id, 'ranks');
     
     const subcommand = interaction.options.getSubcommand();
     
@@ -83,7 +83,11 @@ module.exports = {
  * @param {Object} interaction - Command interaction
  */
 async function handleListCommand(interaction) {
-  const settings = getRankSettings();
+  const settings = await getRankSettings();
+  const database = require('../utils/database').getDatabase();
+  
+  // Get role rewards from database
+  const roleRows = database.prepare('SELECT level, role_id FROM ranks WHERE role_id IS NOT NULL ORDER BY level').all();
   
   // Create embed
   const embed = new EmbedBuilder()
@@ -103,15 +107,12 @@ async function handleListCommand(interaction) {
   });
   
   // Add role rewards
-  const levelEntries = Object.entries(settings.roles)
-    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-  
-  if (levelEntries.length > 0) {
+  if (roleRows.length > 0) {
     let roleRewards = '';
     
-    for (const [level, roleId] of levelEntries) {
-      const xpRequired = calculateRequiredXp(parseInt(level));
-      roleRewards += `Level ${level} (${xpRequired.toLocaleString()} XP): <@&${roleId}>\n`;
+    for (const row of roleRows) {
+      const xpRequired = await calculateRequiredXp(row.level);
+      roleRewards += `Level ${row.level} (${xpRequired.toLocaleString()} XP): <@&${row.role_id}>\n`;
     }
     
     embed.addFields({
@@ -158,12 +159,12 @@ async function handleAddCommand(interaction) {
     return;
   }
   
-  // Update settings
-  const settings = getRankSettings();
-  settings.roles[level.toString()] = role.id;
-  saveRankSettings(settings);
+  // Update database
+  const database = require('../utils/database').getDatabase();
+  const insert = database.prepare('INSERT OR REPLACE INTO ranks (level, role_id, updated_at) VALUES (?, ?, strftime("%s", "now"))');
+  insert.run(level, role.id);
   
-  const xpRequired = calculateRequiredXp(level);
+  const xpRequired = await calculateRequiredXp(level);
   
   await interaction.reply({ 
     content: `✅ Successfully set <@&${role.id}> as the reward for reaching level ${level} (${xpRequired.toLocaleString()} XP).`,
@@ -178,10 +179,11 @@ async function handleAddCommand(interaction) {
 async function handleRemoveCommand(interaction) {
   const level = interaction.options.getInteger('level');
   
-  // Update settings
-  const settings = getRankSettings();
+  // Update database
+  const database = require('../utils/database').getDatabase();
+  const existing = database.prepare('SELECT role_id FROM ranks WHERE level = ?').get(level);
   
-  if (!settings.roles[level.toString()]) {
+  if (!existing || !existing.role_id) {
     await interaction.reply({ 
       content: `❌ There is no role reward configured for level ${level}.`,
       ephemeral: true
@@ -189,9 +191,9 @@ async function handleRemoveCommand(interaction) {
     return;
   }
   
-  const removedRoleId = settings.roles[level.toString()];
-  delete settings.roles[level.toString()];
-  saveRankSettings(settings);
+  const removedRoleId = existing.role_id;
+  const deleteStmt = database.prepare('DELETE FROM ranks WHERE level = ?');
+  deleteStmt.run(level);
   
   await interaction.reply({ 
     content: `✅ Successfully removed the role reward <@&${removedRoleId}> from level ${level}.`,
@@ -219,7 +221,7 @@ async function handleSettingsCommand(interaction) {
   }
   
   // Update settings
-  const settings = getRankSettings();
+  const settings = await getRankSettings();
   let changes = [];
   
   if (textXp !== null) {
@@ -242,7 +244,7 @@ async function handleSettingsCommand(interaction) {
     changes.push(`AFK Disabled: ${afkDisabled ? 'Yes' : 'No'}`);
   }
   
-  saveRankSettings(settings);
+  await saveRankSettings(settings);
   
   await interaction.reply({ 
     content: `✅ Successfully updated rank settings:\n- ${changes.join('\n- ')}`,

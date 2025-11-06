@@ -1,0 +1,39 @@
+{
+  "prestiges": {
+    "1": {
+      "name": "Bronze",
+      "requiredLevel": 100,
+      "color": "#CD7F32",
+      "roleId": null,
+      "xpBoost": 0.05
+    },
+    "2": {
+      "name": "Silver",
+      "requiredLevel": 200,
+      "color": "#C0C0C0",
+      "roleId": null,
+      "xpBoost": 0.1
+    },
+    "3": {
+      "name": "Gold",
+      "requiredLevel": 300,
+      "color": "#FFD700",
+      "roleId": null,
+      "xpBoost": 0.15
+    },
+    "4": {
+      "name": "Platinum",
+      "requiredLevel": 400,
+      "color": "#E5E4E2",
+      "roleId": null,
+      "xpBoost": 0.2
+    },
+    "5": {
+      "name": "Diamond",
+      "requiredLevel": 500,
+      "color": "#B9F2FF",
+      "roleId": null,
+      "xpBoost": 0.25
+    }
+  }
+}

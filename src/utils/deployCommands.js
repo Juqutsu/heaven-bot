@@ -1,6 +1,8 @@
 const { REST, Routes } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
+const { validatePath } = require('./validation');
+const logger = require('./logger');
 
 /**
  * Deploy commands to Discord
@@ -13,17 +15,32 @@ async function deployCommands(token, clientId, guildId) {
   const commands = [];
   // Grab all the command files from the commands directory
   const commandsPath = path.join(__dirname, '..', 'commands');
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+  
+  // Validate path to prevent directory traversal
+  const validatedPath = validatePath(commandsPath, path.join(__dirname, '..'));
+  if (!validatedPath) {
+    throw new Error('Invalid commands directory path');
+  }
+  
+  const commandFiles = fs.readdirSync(validatedPath).filter(file => file.endsWith('.js'));
 
   // Grab the SlashCommandBuilder#toJSON() output of each command's data for deployment
   for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
+    const filePath = path.join(validatedPath, file);
+    
+    // Validate file path
+    const validatedFilePath = validatePath(filePath, validatedPath);
+    if (!validatedFilePath) {
+      logger.warn(`Skipping invalid file path: ${file}`);
+      continue;
+    }
+    
+    const command = require(validatedFilePath);
     
     if ('data' in command && 'execute' in command) {
       commands.push(command.data.toJSON());
     } else {
-      console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+      logger.warn(`The command at ${filePath} is missing a required "data" or "execute" property.`);
     }
   }
 
@@ -31,7 +48,7 @@ async function deployCommands(token, clientId, guildId) {
   const rest = new REST({ version: '10' }).setToken(token);
 
   try {
-    console.log(`Started refreshing ${commands.length} application (/) commands.`);
+    logger.info(`Started refreshing ${commands.length} application (/) commands.`);
 
     // The put method is used to fully refresh all commands with the current set
     const data = await rest.put(
@@ -39,10 +56,10 @@ async function deployCommands(token, clientId, guildId) {
       { body: commands },
     );
 
-    console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+    logger.info(`Successfully reloaded ${data.length} application (/) commands.`);
     return { success: true, count: data.length };
   } catch (error) {
-    console.error(error);
+    logger.error('Error deploying commands:', error);
     return { success: false, error };
   }
 }
