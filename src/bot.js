@@ -1,20 +1,30 @@
 const { Client, Collection, GatewayIntentBits, Events, Partials } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
-const { TOKEN, CLIENT_ID, SERVER_ID } = require('./config');
+const { TOKEN, CLIENT_ID, SERVER_ID, DE_INTERNAL_URL, DE_INTERNAL_SECRET } = require('./config');
 const { deployCommands } = require('./utils/deployCommands');
+const { attachDiscordPresenceForwarder } = require('./utils/discordPresenceForwarder');
 const logger = require('./utils/logger');
 
 // Create a new client instance
-const client = new Client({ 
+const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildMembers,    // privileged — required for presence partial resolution
+    GatewayIntentBits.GuildPresences   // privileged — required for PRESENCE_UPDATE forwarding
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User]
+});
+
+// Forward Discord presence updates to the .de website backend.
+// Disables itself with a logged warning if either env var is missing.
+attachDiscordPresenceForwarder(client, {
+  deUrl: DE_INTERNAL_URL,
+  secret: DE_INTERNAL_SECRET,
 });
 
 // Create a collection for commands

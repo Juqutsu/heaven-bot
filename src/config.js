@@ -104,5 +104,13 @@ module.exports = {
       }
     }
     return null;
+  },
+  get DE_INTERNAL_URL() {
+    const value = process.env.DE_INTERNAL_URL;
+    return value && value.trim() !== '' ? value.trim() : null;
+  },
+  get DE_INTERNAL_SECRET() {
+    const value = process.env.DE_INTERNAL_SECRET;
+    return value && value.trim() !== '' ? value.trim() : null;
   }
 };
